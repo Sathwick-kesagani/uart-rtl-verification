@@ -1,3 +1,4 @@
 sim/*.vvp
 sim/*.vcd
 sim/*.log
+sim/obj_dir/

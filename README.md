@@ -52,6 +52,36 @@ Verilator lint, a simulation, and a 5-seed regression in GitHub Actions.
 back-to-back bytes, slow and fast sender, framing error detected, recovery after error,
 glitch rejected, FIFO full, FIFO overflow.
 
+## Results
+
+The testbench passes on two independent simulators, Icarus Verilog 12 (in CI) and
+Verilator 5.030 (`make vsim`), on 5 random seeds each, and the RTL is Verilator `-Wall` lint clean.
+
+```text
+  byte values received      256 / 256
+  back-to-back bytes        500
+  slow sender (+2%) bytes   100
+  fast sender (-2%) bytes   100
+  framing errors detected   1
+  recovered after error     1
+  glitches rejected         1
+  FIFO overflows detected   4
+  bytes checked by scoreboard 973
+RESULT: PASS
+```
+
+### Does the testbench actually catch bugs?
+
+A testbench that always passes proves nothing, so four bugs were injected into the RTL one at a
+time. The testbench failed on every one:
+
+| Injected bug | Result |
+|---|---|
+| Receiver shifts bits in MSB-first | FAIL, 467 scoreboard errors |
+| Start bit not re-checked at mid-bit (no glitch filter) | FAIL, glitch produced a byte |
+| Stop bit ignored | FAIL, framing error missed |
+| FIFO overwrites data when full | FAIL, 8 scoreboard errors |
+
 ## Run it
 
 Needs [Icarus Verilog](https://steveicarus.github.io/iverilog/) and, for lint,
@@ -63,6 +93,7 @@ make sim             # one run, prints coverage and RESULT: PASS/FAIL
 make sim SEED=42     # different random seed
 make regress         # 5 seeds
 make wave            # dump sim/tb_uart.vcd and open it in GTKWave
+make vsim            # same testbench on Verilator
 ```
 
 No local install? Paste the files into [EDA Playground](https://www.edaplayground.com) with
