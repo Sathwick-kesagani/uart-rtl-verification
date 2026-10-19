@@ -17,11 +17,14 @@ jobs:
         run: make sim
       - name: Regression (5 seeds)
         run: make regress
+      - name: Class-based (UVM-style) testbench on Verilator, 3 tests x 5 seeds
+        run: make uvm_regress
       - name: Summary
         if: always()
         run: |
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           sed -n '/COVERAGE/,/RESULT/p' sim/sim_seed1.log >> "$GITHUB_STEP_SUMMARY" || true
+          sed -n '/SCOREBOARD/,/RESULT/p' sim/uvm_random_test_seed1.log >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()

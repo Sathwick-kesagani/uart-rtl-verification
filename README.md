@@ -82,6 +82,48 @@ time. The testbench failed on every one:
 | Stop bit ignored | FAIL, framing error missed |
 | FIFO overwrites data when full | FAIL, 8 scoreboard errors |
 
+## Class-based (UVM-style) testbench
+
+`tb/uvm_style/` verifies the same RTL with an object-oriented environment built the way a UVM
+testbench is organized, in plain SystemVerilog so it runs on open-source Verilator:
+
+```text
+test --> env --+-- RX agent:  sequence -> serial_driver ---(rx pin)--> DUT receiver
+               |                         fifo_monitor <---(FIFO reads)-- DUT
+               +-- TX agent:  sequence -> tx_driver ---(tx_data/start)--> DUT transmitter
+               |                         serial_monitor <---(tx pin)---- DUT
+               +-- scoreboard  (expected vs observed, both directions, in order)
+               +-- coverage    (byte values, frame kinds, baud-error bins, FIFO events)
+```
+
+| Class | UVM role |
+|---|---|
+| `uart_item` | sequence item (data, kind: good / bad stop bit / glitch, baud error) with weighted randomization |
+| `random_sequence`, `all_values_sequence`, `overflow_sequence` | sequences |
+| `serial_driver`, `tx_driver` | drivers (through a `virtual uart_if`) |
+| `fifo_monitor`, `serial_monitor` | monitors; the serial monitor decodes the TX pin on its own |
+| `uart_scoreboard` | scoreboard with expected queues; drivers and monitors call its `write_*` methods like analysis ports |
+| `uart_coverage` | coverage collector with bins and a hole count |
+| `uart_env`, `base_test` and 3 tests | environment with build / connect / run phases, and tests |
+
+Tests: `random_test` (400 random frames each way at the same time, full duplex, with bad stop bits,
+glitches and -2..+2 % baud error), `all_values_test` (all 256 values each way), and `overflow_test`
+(reader stopped, FIFO must fill, keep 16 bytes and flag 4 overflows).
+
+**Results:** 15 of 15 runs pass (3 tests x 5 seeds). The class-based testbench also catches every
+injected bug, including one the first testbench could only see indirectly:
+
+| Injected bug | Tests failing |
+|---|---|
+| Receiver bit order reversed | 3 of 3 |
+| No mid-bit start check (glitch filter) | 1 (random_test) |
+| Stop bit ignored | 1 (random_test) |
+| FIFO overwrites when full | 1 (overflow_test) |
+| Transmitter repeats a bit | 2 (TX scoreboard) |
+
+It is UVM-style, not the UVM library: no factory, config DB or phasing engine, because the
+open-source simulators used here do not fully support UVM yet.
+
 ## Run it
 
 Needs [Icarus Verilog](https://steveicarus.github.io/iverilog/) and, for lint,
@@ -94,6 +136,8 @@ make sim SEED=42     # different random seed
 make regress         # 5 seeds
 make wave            # dump sim/tb_uart.vcd and open it in GTKWave
 make vsim            # same testbench on Verilator
+make uvm             # class-based testbench, TEST=random_test|all_values_test|overflow_test
+make uvm_regress     # 3 class-based tests x 5 seeds
 ```
 
 No local install? Paste the files into [EDA Playground](https://www.edaplayground.com) with
@@ -103,5 +147,6 @@ Icarus Verilog 12.
 
 - [ ] Add SystemVerilog assertions (SVA) for protocol rules and run them in a simulator that supports them
 - [ ] Add parity and configurable stop bits
-- [ ] Port the testbench to a UVM-style structure (driver, monitor, scoreboard as classes)
+- [x] Port the testbench to a UVM-style structure (driver, monitor, scoreboard as classes)
+- [ ] Move the class-based testbench onto the real UVM library in a simulator that supports it
 - [ ] Synthesize for a Basys 3 / Arty FPGA and loop back to a PC through USB-UART

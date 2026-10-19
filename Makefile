@@ -3,12 +3,16 @@
 # make lint        lint the RTL with Verilator -Wall
 # make wave        run with a VCD waveform dump (open sim/tb_uart.vcd in GTKWave)
 # make vsim        build and run the same testbench with Verilator (--binary --timing)
+# make uvm         class-based (UVM-style) testbench on Verilator, TEST=random_test|all_values_test|overflow_test
+# make uvm_regress all class-based tests on 5 seeds
 
 RTL  := rtl/uart_tx.sv rtl/uart_rx.sv rtl/sync_fifo.sv rtl/uart_core.sv
 TB   := tb/tb_uart.sv
+UVM_TB := tb/uvm_style/uart_if.sv tb/uvm_style/uart_tb_pkg.sv tb/uvm_style/tb_top.sv
+TEST ?= random_test
 SEED ?= 1
 
-.PHONY: sim regress lint wave vsim clean
+.PHONY: sim regress lint wave vsim uvm uvm_build uvm_regress clean
 sim:
 	mkdir -p sim
 	iverilog -g2012 -Wall -o sim/tb_uart.vvp $(RTL) $(TB)
@@ -31,5 +35,19 @@ vsim:
 	./sim/obj_dir/Vtb_uart +seed=$(SEED) | tee sim/vsim_seed$(SEED).log
 	@grep -q "RESULT: PASS" sim/vsim_seed$(SEED).log
 
+uvm_build:
+	mkdir -p sim
+	verilator --binary --timing -j 0 -Wno-fatal -Wno-lint -Wno-style --top-module tb_top -Mdir sim/uvm_obj $(RTL) $(UVM_TB)
+
+uvm: uvm_build
+	./sim/uvm_obj/Vtb_top +TEST=$(TEST) +seed=$(SEED) | tee sim/uvm_$(TEST)_seed$(SEED).log
+	@grep -q "RESULT: PASS" sim/uvm_$(TEST)_seed$(SEED).log
+
+uvm_regress: uvm_build
+	@set -e; for s in 1 7 42 1234 99999; do for t in random_test all_values_test overflow_test; do \
+	  ./sim/uvm_obj/Vtb_top +TEST=$$t +seed=$$s > sim/uvm_$${t}_seed$$s.log; \
+	  grep -q "RESULT: PASS" sim/uvm_$${t}_seed$$s.log && echo "$$t seed $$s: PASS" || { echo "$$t seed $$s: FAIL"; exit 1; }; \
+	done; done
+
 clean:
-	rm -rf sim/*.vvp sim/*.log sim/*.vcd sim/obj_dir
+	rm -rf sim/*.vvp sim/*.log sim/*.vcd sim/obj_dir sim/uvm_obj
