@@ -1,0 +1,30 @@
+name: RTL verification
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog and Verilator
+        run: sudo apt-get update && sudo apt-get install -y iverilog verilator
+      - name: Lint RTL (Verilator -Wall)
+        run: make lint
+      - name: Simulate (seed 1)
+        run: make sim
+      - name: Regression (5 seeds)
+        run: make regress
+      - name: Summary
+        if: always()
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          sed -n '/COVERAGE/,/RESULT/p' sim/sim_seed1.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sim-logs
+          path: sim/*.log
